@@ -1,11 +1,5 @@
 # Synology DSM7 Surveillance (HomeMode)
 
-"homepage": "https://github.com/Romeo1984/homebridge-synology-dsm7-surveillance",
-"repository": {
-  "type": "git",
-  "url": "git+https://github.com/Romeo1984/homebridge-synology-dsm7-surveillance.git"
-}
-
 Modern DSM 7+ compatible Homebridge plugin for controlling Surveillance Station HomeMode.
 
 ---
