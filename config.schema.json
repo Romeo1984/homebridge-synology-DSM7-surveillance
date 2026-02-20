@@ -1,0 +1,48 @@
+{
+  "pluginAlias": "SynologyHomeMode",
+  "pluginType": "accessory",
+  "singular": true,
+  "headerDisplay": "Synology DSM 7+ Surveillance Station",
+  "footerDisplay": "Requires DSM 7+ and a dedicated non-2FA service account.",
+  "schema": {
+    "type": "object",
+    "required": ["host", "username", "password"],
+    "properties": {
+      "name": {
+        "title": "Accessory Name",
+        "type": "string",
+        "default": "Surveillance HomeMode"
+      },
+      "host": {
+        "title": "DSM Host",
+        "type": "string",
+        "placeholder": "192.168.1.10"
+      },
+      "port": {
+        "title": "DSM HTTPS Port",
+        "type": "number",
+        "default": 5001
+      },
+      "username": {
+        "title": "Service Account Username",
+        "type": "string"
+      },
+      "password": {
+        "title": "Service Account Password",
+        "type": "string",
+        "format": "password"
+      },
+      "insecure": {
+        "title": "Allow Self-Signed Certificate",
+        "type": "boolean",
+        "default": false
+      },
+      "debug": {
+        "title": "Enable Debug Logging",
+        "type": "boolean",
+        "default": false
+      }
+    }
+  }
+}
+

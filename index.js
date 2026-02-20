@@ -1,113 +1,184 @@
-'use strict';
+const axios = require('axios');
+const https = require('https');
 
-var Service;
-var Characteristic;
-var request = require('request');
+let Service, Characteristic;
 
-module.exports = function (homebridge) {
-    Service = homebridge.hap.Service;
-    Characteristic = homebridge.hap.Characteristic;
-    homebridge.registerAccessory('homebridge-synology-surveillance-homemode', 'SSHomeMode', HttpMultiswitch);
+module.exports = (homebridge) => {
+  Service = homebridge.hap.Service;
+  Characteristic = homebridge.hap.Characteristic;
+
+  homebridge.registerAccessory(
+    'homebridge-synology-dsm7-surveillance',
+    'SynologyHomeMode',
+    SynologyHomeModeAccessory
+  );
 };
 
-function HttpMultiswitch(log, config) {
+class SynologyHomeModeAccessory {
+
+  constructor(log, config, api) {
     this.log = log;
+    this.api = api;
 
-    this.name = config.name || 'MultiSwitch';
-    this.url = config.url;
+    this.name = config.name || "Surveillance HomeMode";
+    this.host = config.host;
+    this.username = config.username;
+    this.password = config.password;
+    this.port = config.port || 5001;
+    this.insecure = config.insecure || false;
+    this.debug = config.debug || false;
 
-    this.username = config.username || '';
-    this.password = config.password || '';
-    this.sessionToken = "";
-}
+    this.protocol = 'https';
 
-HttpMultiswitch.prototype = {
+    this.sid = null;
+    this.sidExpires = 0;
+    this.isShuttingDown = false;
 
+    this.currentState = false;
+    this.lastFetch = 0;
+    this.cacheTTL = 1500; // short cache for responsiveness
 
-    httpRequest: function (path, callback, recursive) {
-        var _this = this;
-        request({
-                url: this.url + path + "&_sid=" + this.sessionToken,
-                method: "GET",
-                rejectUnauthorized: false,
-            },
-            function (error, response, body) {
-                var resp = JSON.parse(body);
-                if (resp.success || recursive) {
-                    callback(error, response, body);
-                }
-                else {
-                    _this.httpRequest("/webapi/auth.cgi?api=SYNO.API.Auth&method=Login&version=3&account=" + _this.username + "&passwd=" + _this.password + "&session=SurveillanceStation&format=sid",
-                        function (err, resp, bod) {
-                            var r = JSON.parse(bod);
-                            if (r.success) {
-                                //OK logged in
-                                _this.sessionToken = r.data.sid;
-                                _this.log.info("Logged in.");
-                                //Retry the request
-                                _this.httpRequest(path, callback, true);
-                            }
-                            else {
-                                //Didnt work
-                                _this.log.error("Unable to login " + bod);
-                            }
-                        });
-                }
-            });
-    },
-    getState: function (targetService, callback) {
-        this.httpRequest("/webapi/entry.cgi?api=SYNO.SurveillanceStation.HomeMode&version=1&method=GetInfo", function (error, response, responseBody) {
-            if (error) {
-                this.log.error('getPowerState failed: ' + error.message);
-                this.log('response: ' + response + '\nbody: ' + responseBody);
+    this.httpsAgent = new https.Agent({
+      rejectUnauthorized: !this.insecure
+    });
 
-                callback(error);
-            } else {
-                var resp = JSON.parse(responseBody);
-                callback(error, resp.data.on);
-            }
-        }.bind(this));
-    },
+    this.service = new Service.Switch(this.name);
 
-    setPowerState: function (targetService, powerState, callback) {
-        var state = (powerState ? "off" : "on");
-        this.httpRequest("/webapi/entry.cgi?api=SYNO.SurveillanceStation.HomeMode&version=1&method=Switch&" + state + "=true", function (error, response, responseBody) {
-            if (error) {
-                this.log.error('setPowerState failed: ' + error.message);
-                this.log('response: ' + response + '\nbody: ' + responseBody);
+    this.service
+      .getCharacteristic(Characteristic.On)
+      .onSet(this.setHomeMode.bind(this))
+      .onGet(this.getHomeMode.bind(this));
 
-                callback(error);
-            } else {
-                this.log.info('==> ' + (powerState ? "On" : "Off"));
-                callback();
-            }
-        }.bind(this));
-    },
+    api.on('shutdown', () => {
+      this.isShuttingDown = true;
+    });
 
-    identify: function (callback) {
-        this.log('Identify me Senpai!');
-        callback();
-    },
+    // Warm cache after startup
+    setTimeout(() => {
+      this.refreshState().catch(() => {});
+    }, 2000);
+  }
 
-    getServices: function () {
-        this.services = [];
+  getServices() {
+    return [this.service];
+  }
 
-        var informationService = new Service.AccessoryInformation();
-        informationService
-            .setCharacteristic(Characteristic.Manufacturer, 'Synology')
-            .setCharacteristic(Characteristic.Model, 'Surveillance Station');
-        this.services.push(informationService);
-
-
-        var switchService = new Service.Switch(this.name);
-        switchService
-            .getCharacteristic(Characteristic.On)
-            .on('set', this.setPowerState.bind(this, switchService))
-            .on('get', this.getState.bind(this, switchService));
-
-        this.services.push(switchService);
-
-        return this.services;
+  logDebug(message) {
+    if (this.debug) {
+      this.log.debug(message);
     }
-};
+  }
+
+  async login() {
+    if (this.isShuttingDown) return;
+
+    const url = `${this.protocol}://${this.host}:${this.port}/webapi/auth.cgi`;
+
+    const response = await axios.get(url, {
+      params: {
+        api: 'SYNO.API.Auth',
+        method: 'login',
+        version: 7,
+        account: this.username,
+        passwd: this.password,
+        session: 'SurveillanceStation',
+        format: 'sid'
+      },
+      httpsAgent: this.httpsAgent,
+      timeout: 5000
+    });
+
+    if (!response.data.success) {
+      throw new Error(`DSM Authentication failed: ${JSON.stringify(response.data)}`);
+    }
+
+    this.sid = response.data.data.sid;
+    this.sidExpires = Date.now() + (14 * 60 * 1000);
+  }
+
+  async ensureSession() {
+    if (!this.sid || Date.now() > this.sidExpires) {
+      await this.login();
+    }
+  }
+
+  async apiCall(params) {
+    if (this.isShuttingDown) return;
+
+    await this.ensureSession();
+
+    const url = `${this.protocol}://${this.host}:${this.port}/webapi/entry.cgi`;
+
+    const response = await axios.get(url, {
+      params: { ...params, _sid: this.sid },
+      httpsAgent: this.httpsAgent,
+      timeout: 5000
+    });
+
+    if (!response.data.success) {
+      if (response.data.error?.code === 119) {
+        this.sid = null;
+        await this.login();
+        return this.apiCall(params);
+      }
+      throw new Error(JSON.stringify(response.data));
+    }
+
+    return response.data;
+  }
+
+  async refreshState() {
+    const response = await this.apiCall({
+      api: 'SYNO.SurveillanceStation.HomeMode',
+      method: 'GetInfo',
+      version: 1
+    });
+
+    this.currentState = response.data.on;
+    this.lastFetch = Date.now();
+
+    this.service.updateCharacteristic(
+      Characteristic.On,
+      this.currentState
+    );
+  }
+
+  async setHomeMode(value) {
+
+    this.log.info(`Setting HomeMode: ${value}`);
+
+    // Optimistic update
+    this.currentState = value;
+    this.lastFetch = Date.now();
+
+    this.service.updateCharacteristic(
+      Characteristic.On,
+      value
+    );
+
+    await this.apiCall({
+      api: 'SYNO.SurveillanceStation.HomeMode',
+      method: 'Switch',
+      version: 1,
+      on: value
+    });
+
+    // Verify state after short delay
+    setTimeout(() => {
+      this.refreshState().catch(err =>
+        this.log.error("Post-write verification failed:", err.message)
+      );
+    }, 1000);
+  }
+
+  async getHomeMode() {
+
+    if (Date.now() - this.lastFetch < this.cacheTTL) {
+      return this.currentState;
+    }
+
+    await this.refreshState();
+    return this.currentState;
+  }
+}
 

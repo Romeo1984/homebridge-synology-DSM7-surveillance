@@ -1,29 +1,27 @@
 {
-  "name": "homebridge-synology-surveillance-homemode",
+  "name": "homebridge-synology-dsm7-surveillance",
+  "displayName": "Synology DSM7 Surveillance",
   "version": "1.0.3",
-  "author": "jonbell",
-  "description": "Homebridge switch for synology surveillance station's home mode (forked from homebridge-http-multiswitch)",
-  "license": "MIT",
-  "homepage": "https://github.com/jon-bell/homebridge-synology-surveillance-homemode",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/jon-bell/homebridge-synology-surveillance-homemode"
-  },
+  "description": "Modern DSM 7+ compatible Homebridge plugin for Synology Surveillance Station HomeMode",
+  "main": "index.js",
   "keywords": [
     "homebridge-plugin",
-    "multiswitch",
-    "switch",
-    "radio"
+    "homebridge",
+    "synology",
+    "surveillance",
+    "dsm7"
   ],
-  "main": "index.js",
   "engines": {
-    "node": ">=0.12.0",
-    "homebridge": ">=0.2.0"
+    "node": ">=20.0.0",
+    "homebridge": ">=1.8.0"
   },
+  "homebridge": {
+    "accessory": "SynologyHomeMode"
+  },
+  "author": "Mark Pelkoski",
+  "license": "MIT",
   "dependencies": {
-    "request": "^2.65.0"
-  },
-  "bugs": {
-    "url": "https://github.com/jon-bell/homebridge-synology-surveillance-homemode/issues"
+    "axios": "^1.6.0"
   }
 }
+
