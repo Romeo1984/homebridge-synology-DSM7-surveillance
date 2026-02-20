@@ -1,7 +1,7 @@
 {
   "name": "homebridge-synology-dsm7-surveillance",
   "displayName": "Synology DSM7 Surveillance",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Modern DSM 7+ compatible Homebridge plugin for Synology Surveillance Station HomeMode",
   "main": "index.js",
   "keywords": [
@@ -24,4 +24,3 @@
     "axios": "^1.6.0"
   }
 }
-
